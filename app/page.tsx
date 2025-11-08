@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Fingerprint, UserPlus, CheckCircle, AlertCircle, Trash2, Scan, Users, Shield, Activity, Database } from 'lucide-react';
+import { Fingerprint, UserPlus, CheckCircle, AlertCircle, Trash2, Scan, Users, Shield, Activity, Database, X, User, Clock, TrendingUp } from 'lucide-react';
 
 interface User {
   id: number;
@@ -17,6 +17,14 @@ interface CapturedData {
   nfiq: number;
 }
 
+interface VerificationResult {
+  success: boolean;
+  userName?: string;
+  score: number;
+  timestamp: string;
+  image?: string;
+}
+
 export default function FingerprintSystem() {
   const [users, setUsers] = useState<User[]>([]);
   const [name, setName] = useState('');
@@ -25,18 +33,28 @@ export default function FingerprintSystem() {
   const [lastCaptured, setLastCaptured] = useState<CapturedData | null>(null);
   const [activeTab, setActiveTab] = useState<'enroll' | 'verify'>('enroll');
   const [storageStatus, setStorageStatus] = useState<'idle' | 'saving' | 'loading' | 'error'>('idle');
+  const [showModal, setShowModal] = useState(false);
+  const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null);
+  const [isClient, setIsClient] = useState(false);
 
-  // Load users from localStorage on component mount
+  // Set isClient to true when component mounts on client
   useEffect(() => {
-    loadUsersFromStorage();
+    setIsClient(true);
   }, []);
 
-  // Save users to localStorage whenever they change
+  // Load users from localStorage only on client side
   useEffect(() => {
-    if (users.length > 0 || storageStatus === 'idle') {
+    if (isClient) {
+      loadUsersFromStorage();
+    }
+  }, [isClient]);
+
+  // Save users to localStorage whenever they change (only on client)
+  useEffect(() => {
+    if (isClient && (users.length > 0 || storageStatus === 'idle')) {
       saveUsersToStorage();
     }
-  }, [users]);
+  }, [users, isClient, storageStatus]);
 
   const loadUsersFromStorage = () => {
     try {
@@ -74,7 +92,7 @@ export default function FingerprintSystem() {
     try {
       const params = new URLSearchParams({
         Timeout: '10000',
-        Quality: '80',
+        Quality: '50',
         licstr: '',
         templateFormat: 'ISO',
         imageWSQRate: '0.75'
@@ -217,52 +235,45 @@ export default function FingerprintSystem() {
       }
     }
 
-    if (bestScore > 100 && bestMatch) {
-      // Save verification log
-      try {
-        const verificationLog = {
-          timestamp: new Date().toISOString(),
-          userName: bestMatch.name,
-          score: bestScore,
-          success: true
-        };
+    const result: VerificationResult = {
+      success: bestScore > 100 && bestMatch !== null,
+      userName: bestMatch?.name,
+      score: bestScore,
+      timestamp: new Date().toLocaleString('id-ID'),
+      image: lastCaptured?.image
+    };
 
-        const existingLogs = JSON.parse(localStorage.getItem('verificationLogs') || '[]');
-        existingLogs.push(verificationLog);
+    // Save verification log
+    try {
+      const verificationLog = {
+        timestamp: new Date().toISOString(),
+        userName: result.userName,
+        score: result.score,
+        success: result.success
+      };
 
-        // Keep only last 50 logs
-        if (existingLogs.length > 50) {
-          existingLogs.splice(0, existingLogs.length - 50);
-        }
+      const existingLogs = JSON.parse(localStorage.getItem('verificationLogs') || '[]');
+      existingLogs.push(verificationLog);
 
-        localStorage.setItem('verificationLogs', JSON.stringify(existingLogs));
-      } catch (error) {
-        console.error('Error saving verification log:', error);
+      // Keep only last 50 logs
+      if (existingLogs.length > 50) {
+        existingLogs.splice(0, existingLogs.length - 50);
       }
 
-      setMessage(`✓ Verifikasi Berhasil! ${bestMatch.name} (Score: ${bestScore}/199)`);
+      localStorage.setItem('verificationLogs', JSON.stringify(existingLogs));
+    } catch (error) {
+      console.error('Error saving verification log:', error);
+    }
+
+    // Show modal with result
+    setVerificationResult(result);
+    setShowModal(true);
+
+    // Also update message for backward compatibility
+    if (result.success) {
+      setMessage(`✓ Verifikasi Berhasil! ${result.userName} (Score: ${result.score}/199)`);
     } else {
-      // Save failed verification log
-      try {
-        const verificationLog = {
-          timestamp: new Date().toISOString(),
-          score: bestScore,
-          success: false
-        };
-
-        const existingLogs = JSON.parse(localStorage.getItem('verificationLogs') || '[]');
-        existingLogs.push(verificationLog);
-
-        if (existingLogs.length > 50) {
-          existingLogs.splice(0, existingLogs.length - 50);
-        }
-
-        localStorage.setItem('verificationLogs', JSON.stringify(existingLogs));
-      } catch (error) {
-        console.error('Error saving verification log:', error);
-      }
-
-      setMessage(`✗ Sidik jari tidak cocok. Score tertinggi: ${bestScore}/199`);
+      setMessage(`✗ Sidik jari tidak cocok. Score tertinggi: ${result.score}/199`);
     }
   };
 
@@ -344,8 +355,23 @@ export default function FingerprintSystem() {
     reader.readAsText(file);
   };
 
+  // Return a simple loading state while determining if we're on client
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-800 p-4 md:p-8 flex items-center justify-center">
+        <div className="text-white text-center">
+          <div className="inline-flex items-center justify-center p-4 bg-white/10 backdrop-blur-md rounded-full mb-4">
+            <Fingerprint className="w-12 h-12 text-white" />
+          </div>
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">Sistem Sidik Jari SecuGen</h1>
+          <p className="text-white/80 text-lg">Memuat aplikasi...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-linear-to-br from-indigo-900 via-purple-900 to-pink-800 p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-800 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
@@ -468,8 +494,9 @@ export default function FingerprintSystem() {
 
                     <button
                       onClick={enrollUser}
+                      type='button'
                       disabled={isCapturing}
-                      className="w-full bg-linear-to-r from-indigo-500 to-purple-600 text-white py-3 px-4 rounded-lg hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all duration-300 flex items-center justify-center gap-2 shadow-lg"
+                      className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-3 px-4 rounded-lg hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all duration-300 flex items-center justify-center gap-2 shadow-lg"
                     >
                       {isCapturing ? (
                         <>
@@ -505,7 +532,7 @@ export default function FingerprintSystem() {
                     <button
                       onClick={verifyFingerprint}
                       disabled={isCapturing || users.length === 0}
-                      className="w-full bg-linear-to-r from-green-500 to-teal-600 text-white py-3 px-4 rounded-lg hover:from-green-600 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all duration-300 flex items-center justify-center gap-2 shadow-lg"
+                      className="w-full bg-gradient-to-r from-green-500 to-teal-600 text-white py-3 px-4 rounded-lg hover:from-green-600 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all duration-300 flex items-center justify-center gap-2 shadow-lg"
                     >
                       {isCapturing ? (
                         <>
@@ -555,7 +582,7 @@ export default function FingerprintSystem() {
                       </div>
                       <div className="w-full bg-white/10 rounded-full h-2">
                         <div
-                          className="bg-linear-to-r from-green-400 to-green-600 h-2 rounded-full"
+                          className="bg-gradient-to-r from-green-400 to-green-600 h-2 rounded-full"
                           style={{ width: `${lastCaptured.quality}%` }}
                         ></div>
                       </div>
@@ -568,7 +595,7 @@ export default function FingerprintSystem() {
                       </div>
                       <div className="w-full bg-white/10 rounded-full h-2">
                         <div
-                          className="bg-linear-to-r from-yellow-400 to-orange-500 h-2 rounded-full"
+                          className="bg-gradient-to-r from-yellow-400 to-orange-500 h-2 rounded-full"
                           style={{ width: `${(5 - lastCaptured.nfiq) * 20}%` }}
                         ></div>
                       </div>
@@ -630,7 +657,7 @@ export default function FingerprintSystem() {
         {/* Footer Note */}
         <div className="bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/20">
           <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5" />
+            <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-white text-sm font-medium mb-1">Catatan Penting:</p>
               <p className="text-white/70 text-sm">Pastikan SGIBIOSRV berjalan di localhost:8443 dan fingerprint reader terhubung dengan benar. Data tersimpan di localStorage browser dan akan tetap ada setelah refresh halaman.</p>
@@ -638,6 +665,108 @@ export default function FingerprintSystem() {
           </div>
         </div>
       </div>
+
+      {/* Verification Result Modal */}
+      {showModal && verificationResult && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className={`bg-white/10 backdrop-blur-md rounded-2xl p-8 max-w-md w-full border border-white/20 shadow-2xl transform transition-all duration-300 scale-100 ${verificationResult.success ? 'ring-2 ring-green-400/50' : 'ring-2 ring-red-400/50'
+            }`}>
+            {/* Modal Header */}
+            <div className="flex justify-between items-start mb-6">
+              <div className={`p-3 rounded-full ${verificationResult.success ? 'bg-green-500/20' : 'bg-red-500/20'
+                }`}>
+                {verificationResult.success ? (
+                  <CheckCircle className="w-8 h-8 text-green-400" />
+                ) : (
+                  <AlertCircle className="w-8 h-8 text-red-400" />
+                )}
+              </div>
+              <button
+                onClick={() => setShowModal(false)}
+                className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="text-center mb-6">
+              <h3 className={`text-2xl font-bold mb-2 ${verificationResult.success ? 'text-green-400' : 'text-red-400'
+                }`}>
+                {verificationResult.success ? 'Verifikasi Berhasil!' : 'Verifikasi Gagal'}
+              </h3>
+
+              {verificationResult.success && verificationResult.userName && (
+                <div className="flex items-center justify-center gap-2 mb-4">
+                  <User className="w-5 h-5 text-white/80" />
+                  <p className="text-xl text-white font-medium">{verificationResult.userName}</p>
+                </div>
+              )}
+
+              <div className="bg-white/5 rounded-lg p-4 mb-4">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <TrendingUp className="w-5 h-5 text-white/80" />
+                  <span className="text-white/80 text-sm">Matching Score</span>
+                </div>
+                <div className="text-3xl font-bold text-white mb-2">
+                  {verificationResult.score}/199
+                </div>
+                <div className="w-full bg-white/10 rounded-full h-3">
+                  <div
+                    className={`h-3 rounded-full transition-all duration-500 ${verificationResult.success
+                      ? 'bg-gradient-to-r from-green-400 to-green-600'
+                      : 'bg-gradient-to-r from-red-400 to-red-600'
+                      }`}
+                    style={{ width: `${(verificationResult.score / 199) * 100}%` }}
+                  ></div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-center gap-2 text-white/60 text-sm">
+                <Clock className="w-4 h-4" />
+                <span>{verificationResult.timestamp}</span>
+              </div>
+            </div>
+
+            {/* Fingerprint Image */}
+            {verificationResult.image && (
+              <div className="bg-white/5 rounded-lg p-3 mb-6">
+                <img
+                  src={`data:image/bmp;base64,${verificationResult.image}`}
+                  alt="Fingerprint"
+                  className="w-full rounded-lg"
+                />
+              </div>
+            )}
+
+            {/* Modal Footer */}
+            <button
+              onClick={() => setShowModal(false)}
+              className={`w-full py-3 px-4 rounded-lg font-medium transition-all duration-300 ${verificationResult.success
+                ? 'bg-green-500/20 text-green-300 hover:bg-green-500/30 border border-green-400/30'
+                : 'bg-red-500/20 text-red-300 hover:bg-red-500/30 border border-red-400/30'
+                }`}
+            >
+              Tutup
+            </button>
+          </div>
+        </div>
+      )}
+
+      <style jsx>{`
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+        
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease-in-out;
+        }
+      `}</style>
     </div>
   );
 }
