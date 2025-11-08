@@ -224,12 +224,40 @@ export default function FingerprintSystem() {
 
           {lastCaptured && (
             <div className="border rounded-lg p-4 mb-6 bg-gray-50">
-              <h3 className="font-semibold mb-2">Preview Sidik Jari Terakhir:</h3>
-              <img 
-                src={`data:image/bmp;base64,${lastCaptured.image}`} 
-                alt="Fingerprint"
-                className="border rounded"
-              />
+              <h3 className="font-semibold mb-3">Detail Capture Terakhir:</h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <img 
+                    src={`data:image/bmp;base64,${lastCaptured.image}`} 
+                    alt="Fingerprint"
+                    className="border rounded w-full"
+                  />
+                </div>
+                <div className="overflow-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <tbody>
+                      <tr className="border-b">
+                        <td className="py-2 px-3 bg-gray-100 font-semibold">Image Quality (1-100)</td>
+                        <td className="py-2 px-3">{lastCaptured.quality}</td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2 px-3 bg-gray-100 font-semibold">NFIQ (1-5)</td>
+                        <td className="py-2 px-3">{lastCaptured.nfiq}</td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2 px-3 bg-gray-100 font-semibold">Template (base64)</td>
+                        <td className="py-2 px-3">
+                          <textarea 
+                            readOnly 
+                            value={lastCaptured.template} 
+                            className="w-full h-32 p-2 text-xs border rounded font-mono"
+                          />
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
 
